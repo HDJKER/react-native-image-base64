@@ -1,0 +1,9 @@
+{
+  "module": {
+    "name": "ImageBase64",
+    "type": "har",
+    "deviceTypes": [
+      "default"
+    ]
+  }
+}
