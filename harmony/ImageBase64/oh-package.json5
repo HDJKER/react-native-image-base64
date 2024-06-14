@@ -1,0 +1,12 @@
+{
+  "name": "@react-native-oh-tpl/react-native-image-base64",
+  "version": "0.1.4-0.0.1",
+  "description": "Convert image to base64.",
+  "main": "Index.ets",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@rnoh/react-native-openharmony": "file:../react_native_openharmony"
+  },
+
+}

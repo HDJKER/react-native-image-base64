@@ -1,5 +1,4 @@
-
-import { NativeModules } from 'react-native';
+import { NativeModules } from './NativeImageBase64';
 
 const { RNImgToBase64 } = NativeModules;
 
