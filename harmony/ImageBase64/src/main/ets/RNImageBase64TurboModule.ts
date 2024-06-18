@@ -4,12 +4,11 @@ import image from '@ohos.multimedia.image';
 import util from '@ohos.util';
 import http from '@ohos.net.http';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { promptAction } from '@kit.ArkUI';
 import fs from '@ohos.file.fs';
 import { JSON, url } from '@kit.ArkTS';
 
 export class RNImageBase64Module extends TurboModule implements TM.RNImageBase64.Spec {
-  static Name = 'RNImageBase64';
+  static Name = TM.RNImageBase64.NAME;
   getName(): string {
     return 'RNImageBase64'
   }
@@ -18,12 +17,12 @@ export class RNImageBase64Module extends TurboModule implements TM.RNImageBase64
     super(ctx);
     this.context = ctx;
   }
-  // store the type of image
-  private imageType: string
+  // store the type of image, default as 'image/png'
+  private imageType: string = 'image/png'
 
   // main function for getting base64 type of the image by its uri
   async getBase64String(uri: string): Promise<string> {
-    let imagePixelMap: image.PixelMap;
+    let imagePixelMap: image.PixelMap | undefined = undefined;
     try {
       if (uri.includes('http')) {
         // online picture to pixelMap
@@ -31,7 +30,7 @@ export class RNImageBase64Module extends TurboModule implements TM.RNImageBase64
       } else {
         imagePixelMap = await this.getPixelMapFromFile(uri);
       }
-      if (imagePixelMap == null) {
+      if (imagePixelMap === undefined) {
         Promise.reject('Error Bad uri, Failed to decode PixelMap: uri ' + uri);
       }
       return await this.pixelMapToBase64(imagePixelMap);
@@ -42,54 +41,54 @@ export class RNImageBase64Module extends TurboModule implements TM.RNImageBase64
 
   // 网络图片转换为PixelMap
   private async getPixelMapFromURL(src: string): Promise<image.PixelMap> {
-    try {
-      const data: http.HttpResponse = await http.createHttp().request(src);
-      if (data.responseCode !== http.ResponseCode.OK) {
-        promptAction.showToast({
-          message: '图片获取失败',
-          duration: 2000,
-        });
-        throw new Error('图片获取失败');
+    const data: http.HttpResponse = await http.createHttp().request(src);
+    if (data.responseCode === http.ResponseCode.OK && data.result instanceof ArrayBuffer) {
+      if (data.header.hasOwnProperty('content-type')) {
+        this.imageType = data.header['content-type'];
       }
-      this.imageType = data.header['content-type'];
-      const imageData: ArrayBuffer = data.result as ArrayBuffer;
+      let imageData: ArrayBuffer = data.result;
       const imageSource: image.ImageSource = image.createImageSource(imageData);
-      // TODO 样式模板化处理
+      const imageInfo = await imageSource.getImageInfo();
+      const imageWidth = Math.round(imageInfo.size.width);
+      const imageHeight = Math.round(imageInfo.size.height);
       const option: image.InitializationOptions = {
         'alphaType': 0,
         'editable': false,
         'pixelFormat': 3,
         'scaleMode': 1,
-        'size': { height: 100, width: 100 },
+        'size': { height: imageHeight, width: imageWidth },
       }
-      const pixelMap: image.PixelMap = await imageSource.createPixelMap(option);
+      let pixelMap: image.PixelMap = await imageSource.createPixelMap(option);
       return pixelMap;
-    } catch (error) {
-      throw error;
     }
   }
 
-  // 本地图片url转pixelMap
+  // 本地图片uri转pixelMap
   // src对应的是本地图片的协议url
   private async getPixelMapFromFile(src: string): Promise<image.PixelMap> {
     let file = fs.openSync(src, fs.OpenMode.READ_ONLY);
     try {
       const imageSource = image.createImageSource(file.fd);
       const imagePackApi = image.createImagePacker();
-      // TODO 获取本地图片的类型
-      let packOpts: image.PackingOption = {
-        format: 'image/png',
+      const imageInfo = await imageSource.getImageInfo();
+      this.imageType = imageInfo.mimeType;
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(this.imageType)) {
+        this.imageType = 'image/png';
+      }
+      const packOpts: image.PackingOption = {
+        format: `${this.imageType}`,
         quality: 100,
       }
-      const readBuffer = await imagePackApi.packing(imageSource, packOpts);
+      let readBuffer = await imagePackApi.packing(imageSource, packOpts);
       const imageSourceFromBuffer: image.ImageSource = image.createImageSource(readBuffer as ArrayBuffer);
-      // TODO 样式模板化处理
+      const imageWidth = Math.round(imageInfo.size.width);
+      const imageHeight = Math.round(imageInfo.size.height);
       const option: image.InitializationOptions = {
         'alphaType': 0,
         'editable': false,
         'pixelFormat': 3,
         'scaleMode': 1,
-        'size': { height: 100, width: 100 },
+        'size': { height: imageHeight, width: imageWidth },
       }
       return await imageSourceFromBuffer.createPixelMap(option);
     } catch (error) {
@@ -102,6 +101,10 @@ export class RNImageBase64Module extends TurboModule implements TM.RNImageBase64
   private async pixelMapToBase64(pixelMap: image.PixelMap): Promise<string> {
     // 实例化对象以及预制转换条件
     const imagePackerApi: image.ImagePacker = image.createImagePacker();
+    // 目前仅支持png jpeg webp三种格式
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(this.imageType)) {
+      this.imageType = 'image/png';
+    }
     let packOpts: image.PackingOption = {
       format: `${this.imageType}`,
       quality: 100,
@@ -112,7 +115,7 @@ export class RNImageBase64Module extends TurboModule implements TM.RNImageBase64
       imagePackerApi.packing(pixelMap, packOpts).then((data: ArrayBuffer) => {
         let helper = new util.Base64Helper();
         let buf: Uint8Array = new Uint8Array(data);
-        let base64Str = helper.encodeToStringSync(buf); // 转化为base64格式
+        let base64Str = helper.encodeToStringSync(buf);
         resolve(base64Str);
       }).catch((error: BusinessError) => {
         reject(error);
